@@ -65,7 +65,6 @@ public class EventService {
 
         Event savedEvent = eventRepository.save(event);
 
-        // 🔥 RISK EVALUATION
         var rules = riskRuleService.getEnabledRuleEntities(tenantId, request.getEventType());
 
         int score = riskEngineService.evaluateRisk(rules, payloadJson);
