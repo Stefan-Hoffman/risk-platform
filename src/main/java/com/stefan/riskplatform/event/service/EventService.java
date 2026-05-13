@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stefan.riskplatform.alert.service.AlertService;
 import com.stefan.riskplatform.assessment.entity.RiskAssessment;
 import com.stefan.riskplatform.assessment.repository.RiskAssessmentRepository;
+import com.stefan.riskplatform.assessment.repository.RuleHitRepository;
 import com.stefan.riskplatform.common.exception.InvalidPayloadException;
 import com.stefan.riskplatform.common.exception.ResourceNotFoundException;
 import com.stefan.riskplatform.entityrecord.entity.EntityRecord;
@@ -38,6 +39,7 @@ public class EventService {
     private final RiskEngineService riskEngineService;
     private final RiskAssessmentRepository riskAssessmentRepository;
     private final AlertService alertService;
+    private final RuleHitRepository ruleHitRepository;
 
     public EventAcceptedResponse ingestEvent(String tenantId, EventRequest request) {
         Tenant tenant = tenantService.getTenantOrThrow(tenantId);
@@ -67,29 +69,43 @@ public class EventService {
 
         var rules = riskRuleService.getEnabledRuleEntities(tenantId, request.getEventType());
 
-        int score = riskEngineService.evaluateRisk(rules, payloadJson);
+        var matchedRules = riskEngineService.evaluateMatchedRules(rules, payloadJson);
+        int score = matchedRules.stream().mapToInt(r -> r.getRiskScore()).sum();
 
-        var decision = score >= 80 ? "BLOCK"
-                : score >= 50 ? "REVIEW"
-                  : "ALLOW";
+        var decision = score >= 80
+                ? com.stefan.riskplatform.common.enums.RiskDecision.BLOCK
+                : score >= 50
+                  ? com.stefan.riskplatform.common.enums.RiskDecision.REVIEW
+                  : com.stefan.riskplatform.common.enums.RiskDecision.ALLOW;
 
         var assessment = RiskAssessment.builder()
                 .assessmentId(UUID.randomUUID().toString())
                 .event(savedEvent)
                 .tenant(tenant)
                 .totalScore(score)
-                .decision(com.stefan.riskplatform.common.enums.RiskDecision.valueOf(decision))
+                .decision(decision)
                 .evaluatedAt(now)
                 .build();
 
-        riskAssessmentRepository.save(assessment);
+        RiskAssessment savedAssessment = riskAssessmentRepository.save(assessment);
+
+        for (var matchedRule : matchedRules) {
+            ruleHitRepository.save(
+                    com.stefan.riskplatform.assessment.entity.RuleHit.builder()
+                            .assessment(savedAssessment)
+                            .rule(matchedRule)
+                            .riskScore(matchedRule.getRiskScore())
+                            .build()
+            );
+        }
 
         if (score >= 50) {
-            alertService.createAlert(tenant, entityRecord, assessment, score);
+            alertService.createAlert(tenant, entityRecord, savedAssessment, score);
         }
 
         return EventAcceptedResponse.builder()
                 .eventId(savedEvent.getEventId())
+                .assessmentId(savedAssessment.getAssessmentId())
                 .status("ACCEPTED")
                 .build();
     }

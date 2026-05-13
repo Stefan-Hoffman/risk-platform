@@ -46,6 +46,7 @@ class EventControllerTest {
 
         EventAcceptedResponse response = EventAcceptedResponse.builder()
                 .eventId("event_1")
+                .assessmentId("assessment_1")
                 .status("ACCEPTED")
                 .build();
 
@@ -56,6 +57,7 @@ class EventControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.assessmentId").value("assessment_1"))
                 .andExpect(jsonPath("$.eventId").value("event_1"))
                 .andExpect(jsonPath("$.status").value("ACCEPTED"));
     }
