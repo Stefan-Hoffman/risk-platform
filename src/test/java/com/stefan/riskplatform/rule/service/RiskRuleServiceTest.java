@@ -13,6 +13,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import com.stefan.riskplatform.common.dto.PageResponse;
+import com.stefan.riskplatform.common.mapper.PageResponseMapper;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import java.time.Instant;
 import java.util.List;
@@ -34,6 +40,9 @@ class RiskRuleServiceTest {
 
     @InjectMocks
     private RiskRuleService riskRuleService;
+
+    @Mock
+    private PageResponseMapper pageResponseMapper;
 
     @Test
     void shouldCreateRiskRule() {
@@ -104,5 +113,45 @@ class RiskRuleServiceTest {
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getRuleId()).isEqualTo("rule_1");
+    }
+
+    @Test
+    void shouldReturnPaginatedRulesFilteredByEventTypeAndEnabled() {
+        Pageable pageable = PageRequest.of(0, 10);
+
+        RiskRule rule = RiskRule.builder()
+                .ruleId("rule_1")
+                .eventType("LOGIN")
+                .enabled(true)
+                .build();
+
+        RiskRuleResponse response = RiskRuleResponse.builder()
+                .ruleId("rule_1")
+                .eventType("LOGIN")
+                .enabled(true)
+                .build();
+
+        PageResponse<RiskRuleResponse> pageResponse = PageResponse.<RiskRuleResponse>builder()
+                .content(List.of(response))
+                .page(0)
+                .size(10)
+                .totalElements(1)
+                .totalPages(1)
+                .last(true)
+                .build();
+
+        when(riskRuleRepository.findByTenant_TenantIdAndEventTypeAndEnabled(
+                "tenant_1", "LOGIN", true, pageable
+        )).thenReturn(new PageImpl<>(List.of(rule), pageable, 1));
+
+        when(riskRuleMapper.toResponse(rule)).thenReturn(response);
+        when(pageResponseMapper.toPageResponse(any(Page.class)))
+                .thenReturn((PageResponse) pageResponse);
+
+        PageResponse<RiskRuleResponse> result =
+                riskRuleService.getRules("tenant_1", "LOGIN", true, pageable);
+
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().get(0).getRuleId()).isEqualTo("rule_1");
     }
 }

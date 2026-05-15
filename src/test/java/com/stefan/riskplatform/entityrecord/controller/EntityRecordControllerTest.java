@@ -11,6 +11,8 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import com.stefan.riskplatform.common.dto.PageResponse;
+import org.springframework.data.domain.Pageable;
 
 import java.time.Instant;
 import java.util.List;
@@ -21,6 +23,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.mockito.ArgumentMatchers.*;
 
 @WebMvcTest(EntityRecordController.class)
 class EntityRecordControllerTest {
@@ -63,20 +66,35 @@ class EntityRecordControllerTest {
     }
 
     @Test
-    void shouldGetEntityRecordsByTenant() throws Exception {
-        EntityRecordResponse response = EntityRecordResponse.builder()
+    void shouldGetPaginatedEntityRecordsByTenantAndType() throws Exception {
+        EntityRecordResponse entity = EntityRecordResponse.builder()
                 .entityId("user_123")
                 .tenantId("tenant_1")
                 .entityType(EntityType.USER)
                 .createdAt(Instant.now())
                 .build();
 
-        when(entityRecordService.getEntityRecordsByTenant("tenant_1"))
-                .thenReturn(List.of(response));
+        PageResponse<EntityRecordResponse> response = PageResponse.<EntityRecordResponse>builder()
+                .content(List.of(entity))
+                .page(0)
+                .size(10)
+                .totalElements(1)
+                .totalPages(1)
+                .last(true)
+                .build();
+
+        when(entityRecordService.getEntityRecords(eq("tenant_1"), eq(EntityType.USER), any(Pageable.class)))
+                .thenReturn(response);
 
         mockMvc.perform(get("/api/v1/entities")
-                        .header("X-Tenant-Id", "tenant_1"))
+                        .header("X-Tenant-Id", "tenant_1")
+                        .param("entityType", "USER")
+                        .param("page", "0")
+                        .param("size", "10")
+                        .param("sort", "createdAt,desc"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].entityId").value("user_123"));
+                .andExpect(jsonPath("$.content[0].entityId").value("user_123"))
+                .andExpect(jsonPath("$.content[0].entityType").value("USER"))
+                .andExpect(jsonPath("$.totalElements").value(1));
     }
 }

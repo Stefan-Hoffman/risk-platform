@@ -1,15 +1,18 @@
 package com.stefan.riskplatform.entityrecord.controller;
 
+import com.stefan.riskplatform.common.dto.PageResponse;
+import com.stefan.riskplatform.common.enums.EntityType;
 import com.stefan.riskplatform.entityrecord.dto.CreateEntityRecordRequest;
 import com.stefan.riskplatform.entityrecord.dto.EntityRecordResponse;
 import com.stefan.riskplatform.entityrecord.service.EntityRecordService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/entities")
@@ -28,10 +31,23 @@ public class EntityRecordController {
     }
 
     @GetMapping
-    public ResponseEntity<List<EntityRecordResponse>> getEntityRecordsByTenant(
-            @RequestHeader("X-Tenant-Id") String tenantId
+    public ResponseEntity<PageResponse<EntityRecordResponse>> getEntityRecords(
+            @RequestHeader("X-Tenant-Id") String tenantId,
+            @RequestParam(required = false) EntityType entityType,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "createdAt,desc") String[] sort
     ) {
-        List<EntityRecordResponse> response = entityRecordService.getEntityRecordsByTenant(tenantId);
-        return ResponseEntity.ok(response);
+        Pageable pageable = buildPageable(page, size, sort);
+        return ResponseEntity.ok(entityRecordService.getEntityRecords(tenantId, entityType, pageable));
+    }
+
+    private Pageable buildPageable(int page, int size, String[] sort) {
+        String sortField = sort[0];
+        Sort.Direction direction = sort.length > 1 && sort[1].equalsIgnoreCase("asc")
+                ? Sort.Direction.ASC
+                : Sort.Direction.DESC;
+
+        return PageRequest.of(page, size, Sort.by(direction, sortField));
     }
 }

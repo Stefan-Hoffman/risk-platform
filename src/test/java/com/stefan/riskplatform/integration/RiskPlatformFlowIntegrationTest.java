@@ -113,17 +113,22 @@ class RiskPlatformFlowIntegrationTest extends IntegrationTestBase {
 
         String alertsResponse = mockMvc.perform(get("/api/v1/alerts")
                         .header("X-Tenant-Id", "tenant_1")
-                        .param("status", "OPEN"))
+                        .param("status", "OPEN")
+                        .param("page", "0")
+                        .param("size", "10")
+                        .param("sort", "createdAt,desc"))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].status").value("OPEN"))
+                .andExpect(jsonPath("$.totalElements").value(1))
                 .andReturn()
                 .getResponse()
                 .getContentAsString();
 
         JsonNode alertsJson = objectMapper.readTree(alertsResponse);
-        assertThat(alertsJson.isArray()).isTrue();
-        assertThat(alertsJson.size()).isGreaterThan(0);
+        assertThat(alertsJson.get("content").isArray()).isTrue();
+        assertThat(alertsJson.get("content").size()).isGreaterThan(0);
 
-        String alertId = alertsJson.get(0).get("alertId").asText();
+        String alertId = alertsJson.get("content").get(0).get("alertId").asText();
 
         String updateAlertRequest = """
                 {

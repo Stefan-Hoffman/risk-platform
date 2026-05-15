@@ -15,6 +15,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import com.stefan.riskplatform.common.dto.PageResponse;
+import com.stefan.riskplatform.common.mapper.PageResponseMapper;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Page;
 
 import java.time.Instant;
 import java.util.List;
@@ -34,6 +40,9 @@ class AlertServiceTest {
 
     @InjectMocks
     private AlertService alertService;
+
+    @Mock
+    private PageResponseMapper pageResponseMapper;
 
     @Test
     void shouldCreateAlert() {
@@ -112,16 +121,39 @@ class AlertServiceTest {
     }
 
     @Test
-    void shouldReturnAlertsByTenantAndStatus() {
-        Alert alert = Alert.builder().alertId("alert_1").build();
-        AlertResponse response = AlertResponse.builder().alertId("alert_1").build();
+    void shouldReturnPaginatedAlerts() {
+        Pageable pageable = PageRequest.of(0, 10);
 
-        when(alertRepository.findByTenant_TenantIdAndStatus("tenant_1", AlertStatus.OPEN))
-                .thenReturn(List.of(alert));
+        Alert alert = Alert.builder()
+                .alertId("alert_1")
+                .status(AlertStatus.OPEN)
+                .build();
+
+        AlertResponse response = AlertResponse.builder()
+                .alertId("alert_1")
+                .status(AlertStatus.OPEN)
+                .build();
+
+        PageResponse<AlertResponse> pageResponse = PageResponse.<AlertResponse>builder()
+                .content(List.of(response))
+                .page(0)
+                .size(10)
+                .totalElements(1)
+                .totalPages(1)
+                .last(true)
+                .build();
+
+        when(alertRepository.findByTenant_TenantIdAndStatus("tenant_1", AlertStatus.OPEN, pageable))
+                .thenReturn(new PageImpl<>(List.of(alert), pageable, 1));
         when(alertMapper.toResponse(alert)).thenReturn(response);
+        when(pageResponseMapper.toPageResponse(any(Page.class)))
+                .thenReturn((PageResponse) pageResponse);
 
-        List<AlertResponse> result = alertService.getAlertsByTenantAndStatus("tenant_1", AlertStatus.OPEN);
+        PageResponse<AlertResponse> result =
+                alertService.getAlerts("tenant_1", AlertStatus.OPEN, pageable);
 
-        assertThat(result).hasSize(1);
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().get(0).getAlertId()).isEqualTo("alert_1");
+        assertThat(result.getTotalElements()).isEqualTo(1);
     }
 }

@@ -11,6 +11,8 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import com.stefan.riskplatform.common.dto.PageResponse;
+import org.springframework.data.domain.Pageable;
 
 import java.time.Instant;
 import java.util.List;
@@ -35,8 +37,8 @@ class AlertControllerTest {
     private AlertService alertService;
 
     @Test
-    void shouldGetAlertsByTenantAndStatus() throws Exception {
-        AlertResponse response = AlertResponse.builder()
+    void shouldGetPaginatedAlertsByTenantAndStatus() throws Exception {
+        AlertResponse alert = AlertResponse.builder()
                 .alertId("alert_1")
                 .tenantId("tenant_1")
                 .entityId("user_123")
@@ -46,14 +48,30 @@ class AlertControllerTest {
                 .createdAt(Instant.now())
                 .build();
 
-        when(alertService.getAlertsByTenantAndStatus("tenant_1", AlertStatus.OPEN))
-                .thenReturn(List.of(response));
+        PageResponse<AlertResponse> response = PageResponse.<AlertResponse>builder()
+                .content(List.of(alert))
+                .page(0)
+                .size(10)
+                .totalElements(1)
+                .totalPages(1)
+                .last(true)
+                .build();
+
+        when(alertService.getAlerts(eq("tenant_1"), eq(AlertStatus.OPEN), any(Pageable.class)))
+                .thenReturn(response);
 
         mockMvc.perform(get("/api/v1/alerts")
                         .header("X-Tenant-Id", "tenant_1")
-                        .param("status", "OPEN"))
+                        .param("status", "OPEN")
+                        .param("page", "0")
+                        .param("size", "10")
+                        .param("sort", "createdAt,desc"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].alertId").value("alert_1"));
+                .andExpect(jsonPath("$.content[0].alertId").value("alert_1"))
+                .andExpect(jsonPath("$.content[0].status").value("OPEN"))
+                .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.size").value(10))
+                .andExpect(jsonPath("$.totalElements").value(1));
     }
 
     @Test

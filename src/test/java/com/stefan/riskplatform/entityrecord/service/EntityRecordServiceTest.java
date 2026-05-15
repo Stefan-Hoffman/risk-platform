@@ -15,6 +15,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import com.stefan.riskplatform.common.dto.PageResponse;
+import com.stefan.riskplatform.common.mapper.PageResponseMapper;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import java.time.Instant;
 import java.util.List;
@@ -37,6 +43,9 @@ class EntityRecordServiceTest {
 
     @InjectMocks
     private EntityRecordService entityRecordService;
+
+    @Mock
+    private PageResponseMapper pageResponseMapper;
 
     @Test
     void shouldCreateEntityRecord() {
@@ -122,5 +131,42 @@ class EntityRecordServiceTest {
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getEntityId()).isEqualTo("user_123");
+    }
+
+    @Test
+    void shouldReturnPaginatedEntityRecordsFilteredByType() {
+        Pageable pageable = PageRequest.of(0, 10);
+
+        EntityRecord entityRecord = EntityRecord.builder()
+                .entityId("user_123")
+                .entityType(EntityType.USER)
+                .build();
+
+        EntityRecordResponse response = EntityRecordResponse.builder()
+                .entityId("user_123")
+                .tenantId("tenant_1")
+                .entityType(EntityType.USER)
+                .build();
+
+        PageResponse<EntityRecordResponse> pageResponse = PageResponse.<EntityRecordResponse>builder()
+                .content(List.of(response))
+                .page(0)
+                .size(10)
+                .totalElements(1)
+                .totalPages(1)
+                .last(true)
+                .build();
+
+        when(entityRecordRepository.findByTenant_TenantIdAndEntityType("tenant_1", EntityType.USER, pageable))
+                .thenReturn(new PageImpl<>(List.of(entityRecord), pageable, 1));
+        when(entityRecordMapper.toResponse(entityRecord)).thenReturn(response);
+        when(pageResponseMapper.toPageResponse(any(Page.class)))
+                .thenReturn((PageResponse) pageResponse);
+
+        PageResponse<EntityRecordResponse> result =
+                entityRecordService.getEntityRecords("tenant_1", EntityType.USER, pageable);
+
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().get(0).getEntityId()).isEqualTo("user_123");
     }
 }

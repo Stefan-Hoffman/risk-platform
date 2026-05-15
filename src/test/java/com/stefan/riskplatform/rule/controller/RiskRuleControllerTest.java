@@ -10,6 +10,8 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import com.stefan.riskplatform.common.dto.PageResponse;
+import org.springframework.data.domain.Pageable;
 
 import java.time.Instant;
 import java.util.List;
@@ -20,6 +22,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.mockito.ArgumentMatchers.*;
 
 @WebMvcTest(RiskRuleController.class)
 class RiskRuleControllerTest {
@@ -66,8 +69,8 @@ class RiskRuleControllerTest {
     }
 
     @Test
-    void shouldGetRulesByEventType() throws Exception {
-        RiskRuleResponse response = RiskRuleResponse.builder()
+    void shouldGetPaginatedRulesByEventTypeAndEnabled() throws Exception {
+        RiskRuleResponse rule = RiskRuleResponse.builder()
                 .ruleId("rule_1")
                 .tenantId("tenant_1")
                 .name("New Device Login")
@@ -79,13 +82,29 @@ class RiskRuleControllerTest {
                 .createdAt(Instant.now())
                 .build();
 
-        when(riskRuleService.getEnabledRulesByTenantAndEventType("tenant_1", "LOGIN"))
-                .thenReturn(List.of(response));
+        PageResponse<RiskRuleResponse> response = PageResponse.<RiskRuleResponse>builder()
+                .content(List.of(rule))
+                .page(0)
+                .size(10)
+                .totalElements(1)
+                .totalPages(1)
+                .last(true)
+                .build();
+
+        when(riskRuleService.getRules(eq("tenant_1"), eq("LOGIN"), eq(true), any(Pageable.class)))
+                .thenReturn(response);
 
         mockMvc.perform(get("/api/v1/rules")
                         .header("X-Tenant-Id", "tenant_1")
-                        .param("eventType", "LOGIN"))
+                        .param("eventType", "LOGIN")
+                        .param("enabled", "true")
+                        .param("page", "0")
+                        .param("size", "10")
+                        .param("sort", "createdAt,desc"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].ruleId").value("rule_1"));
+                .andExpect(jsonPath("$.content[0].ruleId").value("rule_1"))
+                .andExpect(jsonPath("$.content[0].eventType").value("LOGIN"))
+                .andExpect(jsonPath("$.content[0].enabled").value(true))
+                .andExpect(jsonPath("$.totalElements").value(1));
     }
 }

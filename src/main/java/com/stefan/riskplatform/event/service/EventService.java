@@ -22,10 +22,12 @@ import com.stefan.riskplatform.tenant.entity.Tenant;
 import com.stefan.riskplatform.tenant.service.TenantService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import lombok.extern.slf4j.Slf4j;
 
 import java.time.Instant;
 import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class EventService {
@@ -42,6 +44,9 @@ public class EventService {
     private final RuleHitRepository ruleHitRepository;
 
     public EventAcceptedResponse ingestEvent(String tenantId, EventRequest request) {
+        log.info("Ingesting event. tenantId={}, entityId={}, eventType={}",
+                tenantId, request.getEntityId(), request.getEventType());
+
         Tenant tenant = tenantService.getTenantOrThrow(tenantId);
         EntityRecord entityRecord = entityRecordService.getEntityRecordByTenantOrThrow(
                 request.getEntityId(),
@@ -49,7 +54,6 @@ public class EventService {
         );
 
         Instant now = Instant.now();
-
         String payloadJson = convertPayloadToJson(request);
 
         Event event = Event.builder()
@@ -67,7 +71,12 @@ public class EventService {
 
         Event savedEvent = eventRepository.save(event);
 
+        log.info("Event saved. eventId={}, tenantId={}", savedEvent.getEventId(), tenantId);
+
         var rules = riskRuleService.getEnabledRuleEntities(tenantId, request.getEventType());
+
+        log.debug("Loaded rules for event. tenantId={}, eventType={}, ruleCount={}",
+                tenantId, request.getEventType(), rules.size());
 
         var matchedRules = riskEngineService.evaluateMatchedRules(rules, payloadJson);
         int score = matchedRules.stream().mapToInt(r -> r.getRiskScore()).sum();
@@ -78,7 +87,7 @@ public class EventService {
                   ? com.stefan.riskplatform.common.enums.RiskDecision.REVIEW
                   : com.stefan.riskplatform.common.enums.RiskDecision.ALLOW;
 
-        var assessment = RiskAssessment.builder()
+        RiskAssessment assessment = RiskAssessment.builder()
                 .assessmentId(UUID.randomUUID().toString())
                 .event(savedEvent)
                 .tenant(tenant)
@@ -88,6 +97,13 @@ public class EventService {
                 .build();
 
         RiskAssessment savedAssessment = riskAssessmentRepository.save(assessment);
+
+        log.info("Risk assessment saved. assessmentId={}, eventId={}, score={}, decision={}, matchedRules={}",
+                savedAssessment.getAssessmentId(),
+                savedEvent.getEventId(),
+                score,
+                decision,
+                matchedRules.size());
 
         for (var matchedRule : matchedRules) {
             ruleHitRepository.save(
@@ -101,6 +117,12 @@ public class EventService {
 
         if (score >= 50) {
             alertService.createAlert(tenant, entityRecord, savedAssessment, score);
+
+            log.warn("Alert created for risky event. eventId={}, assessmentId={}, score={}, decision={}",
+                    savedEvent.getEventId(),
+                    savedAssessment.getAssessmentId(),
+                    score,
+                    decision);
         }
 
         return EventAcceptedResponse.builder()
