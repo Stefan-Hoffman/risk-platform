@@ -9,19 +9,19 @@ import java.util.Map;
 @Data
 public class EventRequest {
 
-    @NotBlank
+    @NotBlank(message = "eventType is required")
     private String eventType;
 
-    @NotBlank
+    @NotBlank(message = "entityId is required")
     private String entityId;
 
-    @NotBlank
+    @NotBlank(message = "source is required")
     private String source;
 
     private String ipAddress;
 
     private String deviceId;
 
-    @NotNull
+    @NotNull(message = "payload is required")
     private Map<String, Object> payload;
 }

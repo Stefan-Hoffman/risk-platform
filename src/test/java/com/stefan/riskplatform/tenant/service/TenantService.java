@@ -1,6 +1,7 @@
 package com.stefan.riskplatform.tenant.service;
 
 import com.stefan.riskplatform.common.enums.TenantStatus;
+import com.stefan.riskplatform.common.exception.DuplicateResourceException;
 import com.stefan.riskplatform.common.exception.ResourceNotFoundException;
 import com.stefan.riskplatform.tenant.dto.CreateTenantRequest;
 import com.stefan.riskplatform.tenant.dto.TenantResponse;
@@ -54,6 +55,7 @@ class TenantServiceTest {
 
         when(tenantRepository.save(any(Tenant.class))).thenReturn(savedTenant);
         when(tenantMapper.toResponse(savedTenant)).thenReturn(response);
+        when(tenantRepository.existsById("tenant_1")).thenReturn(false);
 
         TenantResponse result = tenantService.createTenant(request);
 
@@ -87,5 +89,21 @@ class TenantServiceTest {
         assertThatThrownBy(() -> tenantService.getTenantOrThrow("tenant_404"))
                 .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessage("Tenant not found: tenant_404");
+    }
+
+    @Test
+    void shouldThrowWhenTenantAlreadyExists() {
+        CreateTenantRequest request = new CreateTenantRequest();
+        request.setTenantId("tenant_1");
+        request.setName("Acme Bank");
+        request.setStatus(TenantStatus.ACTIVE);
+
+        when(tenantRepository.existsById("tenant_1")).thenReturn(true);
+
+        assertThatThrownBy(() -> tenantService.createTenant(request))
+                .isInstanceOf(DuplicateResourceException.class)
+                .hasMessage("Tenant already exists: tenant_1");
+
+        verify(tenantRepository, never()).save(any(Tenant.class));
     }
 }

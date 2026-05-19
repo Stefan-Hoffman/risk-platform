@@ -8,11 +8,12 @@ import lombok.Data;
 @Data
 public class CreateEntityRecordRequest {
 
-    @NotBlank
+    @NotBlank(message = "entityId is required")
     private String entityId;
 
-    @NotNull
+    @NotNull(message = "entityType is required")
     private EntityType entityType;
 
+    @NotBlank(message = "externalRef is required")
     private String externalRef;
 }

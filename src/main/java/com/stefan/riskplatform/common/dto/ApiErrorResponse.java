@@ -9,10 +9,11 @@ import java.util.List;
 @Data
 @Builder
 public class ApiErrorResponse {
+
     private Instant timestamp;
     private int status;
     private String error;
     private String message;
-    private List<String> details;
     private String path;
+    private List<String> details;
 }

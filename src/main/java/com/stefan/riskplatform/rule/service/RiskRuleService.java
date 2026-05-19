@@ -1,6 +1,10 @@
 package com.stefan.riskplatform.rule.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stefan.riskplatform.common.dto.PageResponse;
+import com.stefan.riskplatform.common.exception.DuplicateResourceException;
+import com.stefan.riskplatform.common.exception.InvalidRuleDefinitionException;
 import com.stefan.riskplatform.common.mapper.PageResponseMapper;
 import com.stefan.riskplatform.rule.dto.CreateRiskRuleRequest;
 import com.stefan.riskplatform.rule.dto.RiskRuleResponse;
@@ -26,9 +30,24 @@ public class RiskRuleService {
     private final RiskRuleMapper riskRuleMapper;
     private final TenantService tenantService;
     private final PageResponseMapper pageResponseMapper;
+    private final ObjectMapper objectMapper;
 
     public RiskRuleResponse createRiskRule(String tenantId, CreateRiskRuleRequest request) {
         Tenant tenant = tenantService.getTenantOrThrow(tenantId);
+
+        if (riskRuleRepository.existsByTenant_TenantIdAndName(tenantId, request.getName())) {
+            throw new DuplicateResourceException(
+                    "Risk rule already exists for tenant. name=" + request.getName()
+            );
+        }
+
+        try {
+            objectMapper.readTree(request.getConditionsJson());
+        } catch (JsonProcessingException ex) {
+            throw new InvalidRuleDefinitionException(
+                    "Invalid conditionsJson structure"
+            );
+        }
 
         RiskRule riskRule = RiskRule.builder()
                 .ruleId(UUID.randomUUID().toString())

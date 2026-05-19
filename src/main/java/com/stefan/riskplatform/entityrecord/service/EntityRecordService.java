@@ -1,6 +1,7 @@
 package com.stefan.riskplatform.entityrecord.service;
 
 import com.stefan.riskplatform.common.dto.PageResponse;
+import com.stefan.riskplatform.common.exception.DuplicateResourceException;
 import com.stefan.riskplatform.common.exception.ResourceNotFoundException;
 import com.stefan.riskplatform.common.mapper.PageResponseMapper;
 import com.stefan.riskplatform.common.enums.EntityType;
@@ -30,6 +31,15 @@ public class EntityRecordService {
 
     public EntityRecordResponse createEntityRecord(String tenantId, CreateEntityRecordRequest request) {
         Tenant tenant = tenantService.getTenantOrThrow(tenantId);
+
+        if (entityRecordRepository.existsByEntityIdAndTenant_TenantId(
+                request.getEntityId(),
+                tenantId
+        )) {
+            throw new DuplicateResourceException(
+                    "Entity already exists for tenant. entityId=" + request.getEntityId()
+            );
+        }
 
         EntityRecord entityRecord = EntityRecord.builder()
                 .entityId(request.getEntityId())

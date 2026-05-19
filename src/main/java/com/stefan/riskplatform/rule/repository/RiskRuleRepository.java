@@ -23,4 +23,6 @@ public interface RiskRuleRepository extends JpaRepository<RiskRule, String> {
             Boolean enabled,
             Pageable pageable
     );
+
+    boolean existsByTenant_TenantIdAndName(String tenantId, String name);
 }

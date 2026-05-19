@@ -18,4 +18,6 @@ public interface EntityRecordRepository extends JpaRepository<EntityRecord, Stri
     Page<EntityRecord> findByTenant_TenantId(String tenantId, Pageable pageable);
 
     Page<EntityRecord> findByTenant_TenantIdAndEntityType(String tenantId, EntityType entityType, Pageable pageable);
+
+    boolean existsByEntityIdAndTenant_TenantId(String entityId, String tenantId);
 }

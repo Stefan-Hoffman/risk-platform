@@ -1,6 +1,10 @@
 package com.stefan.riskplatform.rule.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stefan.riskplatform.common.enums.TenantStatus;
+import com.stefan.riskplatform.common.exception.DuplicateResourceException;
+import com.stefan.riskplatform.common.exception.InvalidRuleDefinitionException;
 import com.stefan.riskplatform.rule.dto.CreateRiskRuleRequest;
 import com.stefan.riskplatform.rule.dto.RiskRuleResponse;
 import com.stefan.riskplatform.rule.entity.RiskRule;
@@ -24,6 +28,7 @@ import java.time.Instant;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -44,8 +49,11 @@ class RiskRuleServiceTest {
     @Mock
     private PageResponseMapper pageResponseMapper;
 
+    @Mock
+    private ObjectMapper objectMapper;
+
     @Test
-    void shouldCreateRiskRule() {
+    void shouldCreateRiskRule() throws Exception{
         Tenant tenant = Tenant.builder()
                 .tenantId("tenant_1")
                 .status(TenantStatus.ACTIVE)
@@ -85,6 +93,10 @@ class RiskRuleServiceTest {
         when(tenantService.getTenantOrThrow("tenant_1")).thenReturn(tenant);
         when(riskRuleRepository.save(any(RiskRule.class))).thenReturn(saved);
         when(riskRuleMapper.toResponse(saved)).thenReturn(response);
+        when(riskRuleRepository.existsByTenant_TenantIdAndName("tenant_1", "New Device Login"))
+                .thenReturn(false);
+        when(objectMapper.readTree(request.getConditionsJson()))
+                .thenReturn(mock(com.fasterxml.jackson.databind.JsonNode.class));
 
         RiskRuleResponse result = riskRuleService.createRiskRule("tenant_1", request);
 
@@ -153,5 +165,55 @@ class RiskRuleServiceTest {
 
         assertThat(result.getContent()).hasSize(1);
         assertThat(result.getContent().get(0).getRuleId()).isEqualTo("rule_1");
+    }
+
+    @Test
+    void shouldThrowWhenRiskRuleNameAlreadyExistsForTenant() {
+        Tenant tenant = Tenant.builder()
+                .tenantId("tenant_1")
+                .build();
+
+        CreateRiskRuleRequest request = new CreateRiskRuleRequest();
+        request.setName("Suspicious login");
+        request.setEventType("LOGIN");
+        request.setConditionsJson("""
+        {"operator":"AND","conditions":[{"field":"knownDevice","operator":"EQUALS","value":false}]}
+        """);
+        request.setRiskScore(60);
+
+        when(tenantService.getTenantOrThrow("tenant_1")).thenReturn(tenant);
+        when(riskRuleRepository.existsByTenant_TenantIdAndName("tenant_1", "Suspicious login"))
+                .thenReturn(true);
+
+        assertThatThrownBy(() -> riskRuleService.createRiskRule("tenant_1", request))
+                .isInstanceOf(DuplicateResourceException.class)
+                .hasMessage("Risk rule already exists for tenant. name=Suspicious login");
+
+        verify(riskRuleRepository, never()).save(any(RiskRule.class));
+    }
+
+    @Test
+    void shouldThrowWhenConditionsJsonIsInvalid() throws Exception {
+        Tenant tenant = Tenant.builder()
+                .tenantId("tenant_1")
+                .build();
+
+        CreateRiskRuleRequest request = new CreateRiskRuleRequest();
+        request.setName("Bad rule");
+        request.setEventType("LOGIN");
+        request.setConditionsJson("{bad-json");
+        request.setRiskScore(60);
+
+        when(tenantService.getTenantOrThrow("tenant_1")).thenReturn(tenant);
+        when(riskRuleRepository.existsByTenant_TenantIdAndName("tenant_1", "Bad rule"))
+                .thenReturn(false);
+        when(objectMapper.readTree("{bad-json"))
+                .thenThrow(new com.fasterxml.jackson.core.JsonProcessingException("Invalid JSON") {});
+
+        assertThatThrownBy(() -> riskRuleService.createRiskRule("tenant_1", request))
+                .isInstanceOf(InvalidRuleDefinitionException.class)
+                .hasMessage("Invalid conditionsJson structure");
+
+        verify(riskRuleRepository, never()).save(any(RiskRule.class));
     }
 }

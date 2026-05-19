@@ -2,6 +2,7 @@ package com.stefan.riskplatform.entityrecord.service;
 
 import com.stefan.riskplatform.common.enums.EntityType;
 import com.stefan.riskplatform.common.enums.TenantStatus;
+import com.stefan.riskplatform.common.exception.DuplicateResourceException;
 import com.stefan.riskplatform.common.exception.ResourceNotFoundException;
 import com.stefan.riskplatform.entityrecord.dto.CreateEntityRecordRequest;
 import com.stefan.riskplatform.entityrecord.dto.EntityRecordResponse;
@@ -80,6 +81,8 @@ class EntityRecordServiceTest {
         when(tenantService.getTenantOrThrow("tenant_1")).thenReturn(tenant);
         when(entityRecordRepository.save(any(EntityRecord.class))).thenReturn(saved);
         when(entityRecordMapper.toResponse(saved)).thenReturn(response);
+        when(entityRecordRepository.existsByEntityIdAndTenant_TenantId("user_123", "tenant_1"))
+                .thenReturn(false);
 
         EntityRecordResponse result = entityRecordService.createEntityRecord("tenant_1", request);
 
@@ -168,5 +171,27 @@ class EntityRecordServiceTest {
 
         assertThat(result.getContent()).hasSize(1);
         assertThat(result.getContent().get(0).getEntityId()).isEqualTo("user_123");
+    }
+
+    @Test
+    void shouldThrowWhenEntityAlreadyExistsForTenant() {
+        Tenant tenant = Tenant.builder()
+                .tenantId("tenant_1")
+                .build();
+
+        CreateEntityRecordRequest request = new CreateEntityRecordRequest();
+        request.setEntityId("user_123");
+        request.setEntityType(EntityType.USER);
+        request.setExternalRef("customer-123");
+
+        when(tenantService.getTenantOrThrow("tenant_1")).thenReturn(tenant);
+        when(entityRecordRepository.existsByEntityIdAndTenant_TenantId("user_123", "tenant_1"))
+                .thenReturn(true);
+
+        assertThatThrownBy(() -> entityRecordService.createEntityRecord("tenant_1", request))
+                .isInstanceOf(DuplicateResourceException.class)
+                .hasMessage("Entity already exists for tenant. entityId=user_123");
+
+        verify(entityRecordRepository, never()).save(any(EntityRecord.class));
     }
 }

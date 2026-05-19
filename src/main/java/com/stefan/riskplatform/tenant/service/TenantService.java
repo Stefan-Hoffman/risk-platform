@@ -1,5 +1,6 @@
 package com.stefan.riskplatform.tenant.service;
 
+import com.stefan.riskplatform.common.exception.DuplicateResourceException;
 import com.stefan.riskplatform.common.exception.ResourceNotFoundException;
 import com.stefan.riskplatform.tenant.dto.CreateTenantRequest;
 import com.stefan.riskplatform.tenant.dto.TenantResponse;
@@ -19,6 +20,12 @@ public class TenantService {
     private final TenantMapper tenantMapper;
 
     public TenantResponse createTenant(CreateTenantRequest request) {
+        if (tenantRepository.existsById(request.getTenantId())) {
+            throw new DuplicateResourceException(
+                    "Tenant already exists: " + request.getTenantId()
+            );
+        }
+
         Tenant tenant = Tenant.builder()
                 .tenantId(request.getTenantId())
                 .name(request.getName())

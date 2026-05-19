@@ -484,11 +484,11 @@ Includes:
 - [ ] ML-based scoring
 
 ## Future Improvements
-- Authentication (JWT / OAuth2)
-- Role-based access control
-- Audit logging
-- Rate limiting
-- Observability (Prometheus, Grafana)
+- [ ] Authentication (JWT / OAuth2)
+- [ ] Role-based access control
+- [ ] Audit logging
+- [ ] Rate limiting
+- [ ] Observability (Prometheus, Grafana)
 ---
 
 # Notes
