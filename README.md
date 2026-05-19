@@ -34,10 +34,167 @@ This project simulates a real-world **fraud detection / risk engine** used in:
 
 # Architecture
 
-## Event Processing Pipeline
+## Architecture Overview
 
-Event → Rule Matching → Score Calculation → Decision → Alert
+The platform currently follows a layered modular monolith architecture using Spring Boot.
 
+### High-Level Flow
+
+```text
+Client Request
+    ↓
+Controller Layer
+    ↓
+Service Layer
+    ↓
+Repository Layer
+    ↓
+PostgreSQL
+```
+
+### Core Architectural Components
+
+#### Controller Layer
+Responsible for exposing REST APIs and handling HTTP requests/responses.
+
+Examples:
+- TenantController
+- EventController
+- RiskRuleController
+- AlertController
+
+Responsibilities:
+- Request validation
+- Request mapping
+- Response formatting
+- Delegating business logic to services
+
+---
+
+#### Service Layer
+Contains the core business logic of the platform.
+
+Examples:
+- EventService
+- RiskRuleService
+- RiskEngineService
+- AlertService
+- RiskAssessmentService
+
+Responsibilities:
+- Event ingestion
+- Rule evaluation
+- Risk scoring
+- Alert generation
+- Tenant validation
+- Assessment creation
+
+The service layer acts as the orchestration layer of the platform.
+
+---
+
+#### Repository Layer
+Handles persistence and database access using Spring Data JPA.
+
+Examples:
+- EventRepository
+- RiskRuleRepository
+- AlertRepository
+
+Responsibilities:
+- CRUD operations
+- Filtering
+- Pagination
+- Tenant-specific data retrieval
+
+---
+
+#### Database Layer
+The platform uses PostgreSQL as the primary relational database.
+
+Database schema management is handled through Flyway migrations.
+
+Key entities include:
+- Tenants
+- Events
+- Risk Rules
+- Risk Assessments
+- Rule Hits
+- Alerts
+- Entity Records
+
+---
+
+### Rule Engine Architecture
+
+Incoming events are evaluated against configurable risk rules stored in the database.
+
+Flow:
+
+```text
+Event Ingestion
+    ↓
+Load Enabled Rules
+    ↓
+Evaluate Rule Conditions
+    ↓
+Calculate Total Risk Score
+    ↓
+Create Risk Assessment
+    ↓
+Generate Alert (if threshold exceeded)
+```
+
+Supported rule operators:
+- EQUALS
+- NOT_EQUALS
+- GREATER_THAN
+- LESS_THAN
+- GREATER_THAN_OR_EQUALS
+- LESS_THAN_OR_EQUALS
+- AND
+- OR
+
+---
+
+### Exception Handling
+
+The platform uses centralized global exception handling through:
+
+```java
+@RestControllerAdvice
+```
+
+This avoids excessive try/catch blocks throughout controllers and services while ensuring standardized API error responses.
+
+---
+
+### Mapping Strategy
+
+The platform uses MapStruct for DTO ↔ Entity mapping.
+
+Benefits:
+- Cleaner services/controllers
+- Reduced boilerplate
+- Better separation of concerns
+
+---
+
+### Current Architectural Direction
+
+The project intentionally starts as a modular monolith to:
+- simplify development
+- reduce operational complexity
+- iterate quickly on business logic
+
+The architecture is being designed to later evolve into microservices when scaling requirements justify the added complexity.
+
+Potential future service extraction areas:
+- Event ingestion service
+- Rule evaluation service
+- Alerting service
+- Graph analysis service
+- Feature store service
 
 ---
 
@@ -66,29 +223,138 @@ git clone https://github.com/YOUR_USERNAME/risk-platform.git
 cd risk-platform
 ```
 
-## 2. Create .env file
+## Docker Setup
+
+The platform supports containerized local development using Docker and Docker Compose.
+
+## Project Docker Files
+
+The following files are included in the project root:
+
+```text
+Dockerfile
+docker-compose.yml
+.dockerignore
 ```
+
+---
+
+## Environment Configuration
+
+Create a `.env` file in the project root:
+
+```env
 DB_HOST=localhost
 DB_PORT=5432
 DB_NAME=risk_platform
 DB_USER=risk_user
 DB_PASSWORD=risk_pass
-SPRING_PROFILES_ACTIVE=dev
 ```
 
-## 3. Start PostGreSQL
+---
 
-## 4. Configure IntelliJ environment variables
+## Build and Run
+
+From the project root:
+
+```bash
+docker compose up --build
+```
+
+This will:
+1. Build the Spring Boot application image
+2. Start the PostgreSQL container
+3. Run Flyway migrations automatically
+4. Start the API on port 8080
+
+---
+
+## Accessing the Application
+
+API:
+```text
+http://localhost:8080
+```
+
+Swagger/OpenAPI:
+```text
+http://localhost:8080/swagger-ui/index.html
+```
+
+---
+
+## Stopping Containers
+
+```bash
+docker compose down
+```
+
+---
+
+## Rebuilding After Changes
+
+```bash
+docker compose up --build
+```
+
+---
+
+## Database Persistence
+
+PostgreSQL data is persisted using Docker volumes.
+
+This ensures:
+- container restarts do not lose data
+- local development data remains available
+
+---
+
+## Docker Networking Notes
+
+Inside Docker Compose:
+- the Spring Boot application connects to PostgreSQL using the container service name
+- `DB_HOST=postgres`
+
+Example internal connection:
+
+```text
+jdbc:postgresql://postgres:5432/risk_platform
+```
+
+Outside Docker (local IntelliJ runs):
+- `DB_HOST=localhost`
+
+---
+
+## Flyway Migrations
+
+Flyway migrations automatically execute on application startup.
+
+Migration files are located in:
+
+```text
+src/main/resources/db/migration
+```
+
+Example:
+
+```text
+V1__init_schema.sql
+```
+
+---
+## When not using Docker
+### 4. Configure IntelliJ environment variables
 ```
 DB_HOST=localhost;DB_PORT=5432;DB_NAME=risk_platform;DB_USER=risk_user;DB_PASSWORD=risk_pass
 ```
 
-## 5. Run the Application
+### 5. Run the Application
 ```
 ./mvnw spring-boot:run
 ```
 
-## 6. Open Swagger UI
+### 6. Open Swagger UI
 ```
 http://localhost:8080/swagger-ui/index.html
 ```
@@ -184,36 +450,38 @@ Includes:
 # Roadmap
 
 ## Phase 1 (Completed)
-- REST API structure
-- Multi-tenancy support
-- Event ingestion
-- Rule engine (basic)
-- Risk scoring
-- Alert generation
-- Unit + controller tests
+- [x] REST API structure
+- [x] Multi-tenancy support
+- [x] Event ingestion
+- [x] Rule engine (basic)
+- [x] Risk scoring
+- [x] Alert generation
+- [x] Unit + controller tests
 
 ## Phase 2 (Next)
-- Rule operators (>, <, AND, OR)
-- Rule hit tracking
-- Pagination + filtering
-- Improved validation and error handling
+- [x] Rule operators (>, <, AND, OR)
+- [x] Rule hit tracking
+- [x] Pagination + filtering
+- [ ] Improved validation and error handling
 
 ## Phase 3
-- Feature store (user behavior history)
-- Velocity rules (e.g. login frequency)
-- Device/IP fingerprinting
-- Risk aggregation over time
+- [ ] Feature store (user behavior history)
+- [ ] Velocity rules (e.g. login frequency)
+- [ ] Device/IP fingerprinting
+- [ ] Risk aggregation over time
+- [ ] Behavioral anomaly detection
 
 ## Phase 4
-- Graph-based analysis (Neo4j)
-- Shared device/IP detection
-- Fraud ring detection
+- [ ] Graph-based analysis (Neo4j)
+- [ ] Shared device/IP detection
+- [ ] Fraud ring detection
+- [ ] Entity relationship scoring
 
 ## Phase 5
-- Async processing (Kafka/RabbitMQ)
-- Microservices architecture
-- Real-time dashboards
-- ML-based scoring
+- [ ] Async processing (Kafka/RabbitMQ)
+- [ ] Microservices architecture
+- [ ] Real-time dashboards
+- [ ] ML-based scoring
 
 ## Future Improvements
 - Authentication (JWT / OAuth2)
@@ -221,7 +489,6 @@ Includes:
 - Audit logging
 - Rate limiting
 - Observability (Prometheus, Grafana)
-- Frontend (Angular - TBD)
 ---
 
 # Notes
