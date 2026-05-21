@@ -458,7 +458,7 @@ Includes:
 - [x] Alert generation
 - [x] Unit + controller tests
 
-## Phase 2 (Next)
+## Phase 2 (Completed)
 - [x] Rule operators (>, <, AND, OR)
 - [x] Rule hit tracking
 - [x] Pagination + filtering
