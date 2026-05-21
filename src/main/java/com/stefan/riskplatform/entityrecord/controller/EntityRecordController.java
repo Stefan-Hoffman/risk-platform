@@ -2,6 +2,7 @@ package com.stefan.riskplatform.entityrecord.controller;
 
 import com.stefan.riskplatform.common.dto.PageResponse;
 import com.stefan.riskplatform.common.enums.EntityType;
+import com.stefan.riskplatform.common.util.PageableUtils;
 import com.stefan.riskplatform.entityrecord.dto.CreateEntityRecordRequest;
 import com.stefan.riskplatform.entityrecord.dto.EntityRecordResponse;
 import com.stefan.riskplatform.entityrecord.service.EntityRecordService;
@@ -43,6 +44,8 @@ public class EntityRecordController {
     }
 
     private Pageable buildPageable(int page, int size, String[] sort) {
+        PageableUtils.validatePageable(page, size);
+
         String sortField = sort[0];
         Sort.Direction direction = sort.length > 1 && sort[1].equalsIgnoreCase("asc")
                 ? Sort.Direction.ASC

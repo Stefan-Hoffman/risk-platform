@@ -5,6 +5,7 @@ import com.stefan.riskplatform.alert.dto.UpdateAlertStatusRequest;
 import com.stefan.riskplatform.alert.service.AlertService;
 import com.stefan.riskplatform.common.dto.PageResponse;
 import com.stefan.riskplatform.common.enums.AlertStatus;
+import com.stefan.riskplatform.common.util.PageableUtils;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
@@ -34,14 +35,17 @@ public class AlertController {
 
     @PatchMapping("/{alertId}/status")
     public ResponseEntity<AlertResponse> updateAlertStatus(
+            @RequestHeader("X-Tenant-Id") String tenantId,
             @PathVariable String alertId,
             @Valid @RequestBody UpdateAlertStatusRequest request
     ) {
-        AlertResponse response = alertService.updateAlertStatus(alertId, request);
+        AlertResponse response = alertService.updateAlertStatus(tenantId, alertId, request);
         return ResponseEntity.ok(response);
     }
 
     private Pageable buildPageable(int page, int size, String[] sort) {
+        PageableUtils.validatePageable(page, size);
+
         String sortField = sort[0];
         Sort.Direction direction = sort.length > 1 && sort[1].equalsIgnoreCase("asc")
                 ? Sort.Direction.ASC

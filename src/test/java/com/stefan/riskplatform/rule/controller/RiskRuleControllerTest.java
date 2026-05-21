@@ -107,4 +107,24 @@ class RiskRuleControllerTest {
                 .andExpect(jsonPath("$.content[0].enabled").value(true))
                 .andExpect(jsonPath("$.totalElements").value(1));
     }
+
+    @Test
+    void shouldReturnBadRequestWhenPageIsNegative() throws Exception {
+        mockMvc.perform(get("/api/v1/rules")
+                        .header("X-Tenant-Id", "tenant_1")
+                        .param("page", "-1")
+                        .param("size", "10"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("page must be >= 0"));
+    }
+
+    @Test
+    void shouldReturnBadRequestWhenSizeIsTooLarge() throws Exception {
+        mockMvc.perform(get("/api/v1/rules")
+                        .header("X-Tenant-Id", "tenant_1")
+                        .param("page", "0")
+                        .param("size", "101"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("size must be between 1 and 100"));
+    }
 }

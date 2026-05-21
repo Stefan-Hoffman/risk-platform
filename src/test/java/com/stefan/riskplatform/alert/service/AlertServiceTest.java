@@ -99,25 +99,27 @@ class AlertServiceTest {
                 .status(AlertStatus.RESOLVED)
                 .build();
 
-        when(alertRepository.findById("alert_1")).thenReturn(Optional.of(alert));
+        when(alertRepository.findByAlertIdAndTenant_TenantId("alert_1", "tenant_1"))
+                .thenReturn(Optional.of(alert));
         when(alertRepository.save(alert)).thenReturn(updated);
         when(alertMapper.toResponse(updated)).thenReturn(response);
 
-        AlertResponse result = alertService.updateAlertStatus("alert_1", request);
+        AlertResponse result = alertService.updateAlertStatus("tenant_1", "alert_1", request);
 
         assertThat(result.getStatus()).isEqualTo(AlertStatus.RESOLVED);
     }
 
     @Test
-    void shouldThrowWhenAlertNotFound() {
+    void shouldThrowWhenAlertNotFoundForTenant() {
         UpdateAlertStatusRequest request = new UpdateAlertStatusRequest();
         request.setStatus(AlertStatus.RESOLVED);
 
-        when(alertRepository.findById("alert_404")).thenReturn(Optional.empty());
+        when(alertRepository.findByAlertIdAndTenant_TenantId("alert_404", "tenant_1"))
+                .thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> alertService.updateAlertStatus("alert_404", request))
+        assertThatThrownBy(() -> alertService.updateAlertStatus("tenant_1", "alert_404", request))
                 .isInstanceOf(ResourceNotFoundException.class)
-                .hasMessage("Alert not found: alert_404");
+                .hasMessage("Alert not found for tenant. alertId=alert_404, tenantId=tenant_1");
     }
 
     @Test

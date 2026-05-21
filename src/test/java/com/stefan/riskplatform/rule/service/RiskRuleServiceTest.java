@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import com.stefan.riskplatform.common.dto.PageResponse;
 import com.stefan.riskplatform.common.mapper.PageResponseMapper;
@@ -49,21 +50,49 @@ class RiskRuleServiceTest {
     @Mock
     private PageResponseMapper pageResponseMapper;
 
-    @Mock
-    private ObjectMapper objectMapper;
+    @Spy
+    private ObjectMapper objectMapper = new ObjectMapper();
 
-    @Test
-    void shouldCreateRiskRule() throws Exception{
+    private CreateRiskRuleRequest buildRuleRequest(String conditionsJson) {
+        CreateRiskRuleRequest request = new CreateRiskRuleRequest();
+        request.setName("Bad Rule");
+        request.setEventType("LOGIN");
+        request.setConditionsJson(conditionsJson);
+        request.setRiskScore(60);
+        return request;
+    }
+
+    private void mockValidTenantAndNoDuplicate(CreateRiskRuleRequest request) {
         Tenant tenant = Tenant.builder()
                 .tenantId("tenant_1")
-                .status(TenantStatus.ACTIVE)
-                .createdAt(Instant.now())
+                .build();
+
+        when(tenantService.getTenantOrThrow("tenant_1")).thenReturn(tenant);
+        when(riskRuleRepository.existsByTenant_TenantIdAndName("tenant_1", request.getName()))
+                .thenReturn(false);
+    }
+
+    @Test
+    void shouldCreateRiskRule() throws Exception {
+        Tenant tenant = Tenant.builder()
+                .tenantId("tenant_1")
                 .build();
 
         CreateRiskRuleRequest request = new CreateRiskRuleRequest();
         request.setName("New Device Login");
         request.setEventType("LOGIN");
-        request.setConditionsJson("{\"field\":\"knownDevice\",\"value\":false}");
+        request.setConditionsJson("""
+        {
+          "operator": "AND",
+          "conditions": [
+            {
+              "field": "knownDevice",
+              "operator": "EQUALS",
+              "value": false
+            }
+          ]
+        }
+        """);
         request.setRiskScore(40);
 
         RiskRule saved = RiskRule.builder()
@@ -91,12 +120,10 @@ class RiskRuleServiceTest {
                 .build();
 
         when(tenantService.getTenantOrThrow("tenant_1")).thenReturn(tenant);
-        when(riskRuleRepository.save(any(RiskRule.class))).thenReturn(saved);
-        when(riskRuleMapper.toResponse(saved)).thenReturn(response);
         when(riskRuleRepository.existsByTenant_TenantIdAndName("tenant_1", "New Device Login"))
                 .thenReturn(false);
-        when(objectMapper.readTree(request.getConditionsJson()))
-                .thenReturn(mock(com.fasterxml.jackson.databind.JsonNode.class));
+        when(riskRuleRepository.save(any(RiskRule.class))).thenReturn(saved);
+        when(riskRuleMapper.toResponse(saved)).thenReturn(response);
 
         RiskRuleResponse result = riskRuleService.createRiskRule("tenant_1", request);
 
@@ -193,26 +220,291 @@ class RiskRuleServiceTest {
     }
 
     @Test
-    void shouldThrowWhenConditionsJsonIsInvalid() throws Exception {
+    void shouldThrowWhenConditionsJsonIsInvalid() {
         Tenant tenant = Tenant.builder()
                 .tenantId("tenant_1")
                 .build();
 
         CreateRiskRuleRequest request = new CreateRiskRuleRequest();
-        request.setName("Bad rule");
+        request.setName("Bad Rule");
         request.setEventType("LOGIN");
         request.setConditionsJson("{bad-json");
         request.setRiskScore(60);
 
         when(tenantService.getTenantOrThrow("tenant_1")).thenReturn(tenant);
-        when(riskRuleRepository.existsByTenant_TenantIdAndName("tenant_1", "Bad rule"))
+        when(riskRuleRepository.existsByTenant_TenantIdAndName("tenant_1", "Bad Rule"))
                 .thenReturn(false);
-        when(objectMapper.readTree("{bad-json"))
-                .thenThrow(new com.fasterxml.jackson.core.JsonProcessingException("Invalid JSON") {});
 
         assertThatThrownBy(() -> riskRuleService.createRiskRule("tenant_1", request))
                 .isInstanceOf(InvalidRuleDefinitionException.class)
                 .hasMessage("Invalid conditionsJson structure");
+
+        verify(riskRuleRepository, never()).save(any(RiskRule.class));
+    }
+
+    @Test
+    void shouldThrowWhenRuleOperatorIsInvalid() throws Exception {
+        Tenant tenant = Tenant.builder()
+                .tenantId("tenant_1")
+                .build();
+
+        CreateRiskRuleRequest request = new CreateRiskRuleRequest();
+        request.setName("Bad Rule");
+        request.setEventType("LOGIN");
+        request.setRiskScore(50);
+
+        request.setConditionsJson("""
+        {
+          "operator": "XOR",
+          "conditions": [
+            {
+              "field": "country",
+              "operator": "EQUALS",
+              "value": "ZA"
+            }
+          ]
+        }
+        """);
+
+        JsonNode jsonNode = objectMapper.readTree(request.getConditionsJson());
+
+        when(tenantService.getTenantOrThrow("tenant_1"))
+                .thenReturn(tenant);
+
+        when(riskRuleRepository.existsByTenant_TenantIdAndName(
+                "tenant_1",
+                "Bad Rule"
+        )).thenReturn(false);
+
+        when(objectMapper.readTree(request.getConditionsJson()))
+                .thenReturn(jsonNode);
+
+        assertThatThrownBy(() ->
+                riskRuleService.createRiskRule("tenant_1", request)
+        )
+                .isInstanceOf(InvalidRuleDefinitionException.class)
+                .hasMessage("Top-level operator must be AND or OR");
+    }
+
+    @Test
+    void shouldThrowWhenRuleMissingTopLevelOperator() throws Exception {
+        CreateRiskRuleRequest request = buildRuleRequest("""
+        {
+          "conditions": [
+            {
+              "field": "knownDevice",
+              "operator": "EQUALS",
+              "value": false
+            }
+          ]
+        }
+        """);
+
+        mockValidTenantAndNoDuplicate(request);
+
+        assertThatThrownBy(() -> riskRuleService.createRiskRule("tenant_1", request))
+                .isInstanceOf(InvalidRuleDefinitionException.class)
+                .hasMessage("Rule must contain an operator");
+
+        verify(riskRuleRepository, never()).save(any(RiskRule.class));
+    }
+
+    @Test
+    void shouldThrowWhenTopLevelOperatorIsInvalid() throws Exception {
+        CreateRiskRuleRequest request = buildRuleRequest("""
+        {
+          "operator": "XOR",
+          "conditions": [
+            {
+              "field": "knownDevice",
+              "operator": "EQUALS",
+              "value": false
+            }
+          ]
+        }
+        """);
+
+        mockValidTenantAndNoDuplicate(request);
+
+        assertThatThrownBy(() -> riskRuleService.createRiskRule("tenant_1", request))
+                .isInstanceOf(InvalidRuleDefinitionException.class)
+                .hasMessage("Top-level operator must be AND or OR");
+
+        verify(riskRuleRepository, never()).save(any(RiskRule.class));
+    }
+
+    @Test
+    void shouldThrowWhenRuleMissingConditions() throws Exception {
+        CreateRiskRuleRequest request = buildRuleRequest("""
+        {
+          "operator": "AND"
+        }
+        """);
+
+        mockValidTenantAndNoDuplicate(request);
+
+        assertThatThrownBy(() -> riskRuleService.createRiskRule("tenant_1", request))
+                .isInstanceOf(InvalidRuleDefinitionException.class)
+                .hasMessage("Rule must contain conditions");
+
+        verify(riskRuleRepository, never()).save(any(RiskRule.class));
+    }
+
+    @Test
+    void shouldThrowWhenConditionsArrayIsEmpty() throws Exception {
+        CreateRiskRuleRequest request = buildRuleRequest("""
+        {
+          "operator": "AND",
+          "conditions": []
+        }
+        """);
+
+        mockValidTenantAndNoDuplicate(request);
+
+        assertThatThrownBy(() -> riskRuleService.createRiskRule("tenant_1", request))
+                .isInstanceOf(InvalidRuleDefinitionException.class)
+                .hasMessage("conditions must be a non-empty array");
+
+        verify(riskRuleRepository, never()).save(any(RiskRule.class));
+    }
+
+    @Test
+    void shouldThrowWhenConditionMissingField() throws Exception {
+        CreateRiskRuleRequest request = buildRuleRequest("""
+        {
+          "operator": "AND",
+          "conditions": [
+            {
+              "operator": "EQUALS",
+              "value": false
+            }
+          ]
+        }
+        """);
+
+        mockValidTenantAndNoDuplicate(request);
+
+        assertThatThrownBy(() -> riskRuleService.createRiskRule("tenant_1", request))
+                .isInstanceOf(InvalidRuleDefinitionException.class)
+                .hasMessage("Condition missing field");
+
+        verify(riskRuleRepository, never()).save(any(RiskRule.class));
+    }
+
+    @Test
+    void shouldThrowWhenConditionFieldIsBlank() throws Exception {
+        CreateRiskRuleRequest request = buildRuleRequest("""
+        {
+          "operator": "AND",
+          "conditions": [
+            {
+              "field": "",
+              "operator": "EQUALS",
+              "value": false
+            }
+          ]
+        }
+        """);
+
+        mockValidTenantAndNoDuplicate(request);
+
+        assertThatThrownBy(() -> riskRuleService.createRiskRule("tenant_1", request))
+                .isInstanceOf(InvalidRuleDefinitionException.class)
+                .hasMessage("Condition field cannot be blank");
+
+        verify(riskRuleRepository, never()).save(any(RiskRule.class));
+    }
+
+    @Test
+    void shouldThrowWhenConditionMissingOperator() throws Exception {
+        CreateRiskRuleRequest request = buildRuleRequest("""
+        {
+          "operator": "AND",
+          "conditions": [
+            {
+              "field": "knownDevice",
+              "value": false
+            }
+          ]
+        }
+        """);
+
+        mockValidTenantAndNoDuplicate(request);
+
+        assertThatThrownBy(() -> riskRuleService.createRiskRule("tenant_1", request))
+                .isInstanceOf(InvalidRuleDefinitionException.class)
+                .hasMessage("Condition missing operator");
+
+        verify(riskRuleRepository, never()).save(any(RiskRule.class));
+    }
+
+    @Test
+    void shouldThrowWhenConditionOperatorIsBlank() throws Exception {
+        CreateRiskRuleRequest request = buildRuleRequest("""
+        {
+          "operator": "AND",
+          "conditions": [
+            {
+              "field": "knownDevice",
+              "operator": "",
+              "value": false
+            }
+          ]
+        }
+        """);
+
+        mockValidTenantAndNoDuplicate(request);
+
+        assertThatThrownBy(() -> riskRuleService.createRiskRule("tenant_1", request))
+                .isInstanceOf(InvalidRuleDefinitionException.class)
+                .hasMessage("Condition operator cannot be blank");
+
+        verify(riskRuleRepository, never()).save(any(RiskRule.class));
+    }
+
+    @Test
+    void shouldThrowWhenConditionMissingValue() throws Exception {
+        CreateRiskRuleRequest request = buildRuleRequest("""
+        {
+          "operator": "AND",
+          "conditions": [
+            {
+              "field": "knownDevice",
+              "operator": "EQUALS"
+            }
+          ]
+        }
+        """);
+
+        mockValidTenantAndNoDuplicate(request);
+
+        assertThatThrownBy(() -> riskRuleService.createRiskRule("tenant_1", request))
+                .isInstanceOf(InvalidRuleDefinitionException.class)
+                .hasMessage("Condition missing value");
+
+        verify(riskRuleRepository, never()).save(any(RiskRule.class));
+    }
+
+    @Test
+    void shouldThrowWhenConditionOperatorUnsupported() throws Exception {
+        CreateRiskRuleRequest request = buildRuleRequest("""
+        {
+          "operator": "AND",
+          "conditions": [
+            {
+              "field": "country",
+              "operator": "CONTAINS",
+              "value": "ZA"
+            }
+          ]
+        }
+        """);
+
+        mockValidTenantAndNoDuplicate(request);
+
+        assertThatThrownBy(() -> riskRuleService.createRiskRule("tenant_1", request))
+                .isInstanceOf(InvalidRuleDefinitionException.class)
+                .hasMessage("Unsupported condition operator: CONTAINS");
 
         verify(riskRuleRepository, never()).save(any(RiskRule.class));
     }

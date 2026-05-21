@@ -1,6 +1,7 @@
 package com.stefan.riskplatform.rule.controller;
 
 import com.stefan.riskplatform.common.dto.PageResponse;
+import com.stefan.riskplatform.common.util.PageableUtils;
 import com.stefan.riskplatform.rule.dto.CreateRiskRuleRequest;
 import com.stefan.riskplatform.rule.dto.RiskRuleResponse;
 import com.stefan.riskplatform.rule.service.RiskRuleService;
@@ -43,6 +44,8 @@ public class RiskRuleController {
     }
 
     private Pageable buildPageable(int page, int size, String[] sort) {
+        PageableUtils.validatePageable(page, size);
+
         String sortField = sort[0];
         Sort.Direction direction = sort.length > 1 && sort[1].equalsIgnoreCase("asc")
                 ? Sort.Direction.ASC

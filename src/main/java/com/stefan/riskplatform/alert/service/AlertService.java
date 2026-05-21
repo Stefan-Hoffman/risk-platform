@@ -64,9 +64,11 @@ public class AlertService {
         return pageResponseMapper.toPageResponse(mappedPage);
     }
 
-    public AlertResponse updateAlertStatus(String alertId, UpdateAlertStatusRequest request) {
-        Alert alert = alertRepository.findById(alertId)
-                .orElseThrow(() -> new ResourceNotFoundException("Alert not found: " + alertId));
+    public AlertResponse updateAlertStatus(String tenantId, String alertId, UpdateAlertStatusRequest request) {
+        Alert alert = alertRepository.findByAlertIdAndTenant_TenantId(alertId, tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Alert not found for tenant. alertId=" + alertId + ", tenantId=" + tenantId
+                ));
 
         alert.setStatus(request.getStatus());
 

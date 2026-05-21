@@ -462,10 +462,10 @@ Includes:
 - [x] Rule operators (>, <, AND, OR)
 - [x] Rule hit tracking
 - [x] Pagination + filtering
-- [ ] Improved validation and error handling
+- [x] Improved validation and error handling
 
 ## Phase 3
-- [ ] Feature store (user behavior history)
+- [ ] Feature store (user behavior history) (current)
 - [ ] Velocity rules (e.g. login frequency)
 - [ ] Device/IP fingerprinting
 - [ ] Risk aggregation over time

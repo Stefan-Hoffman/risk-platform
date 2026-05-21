@@ -3,11 +3,14 @@ package com.stefan.riskplatform.integration;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stefan.riskplatform.support.IntegrationTestBase;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -21,6 +24,9 @@ class RiskPlatformFlowIntegrationTest extends IntegrationTestBase {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     @Test
     void shouldExecuteFullRiskFlow() throws Exception {
@@ -128,6 +134,33 @@ class RiskPlatformFlowIntegrationTest extends IntegrationTestBase {
         assertThat(alertsJson.get("content").isArray()).isTrue();
         assertThat(alertsJson.get("content").size()).isGreaterThan(0);
 
+        Integer profileCount = jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*)
+                FROM entity_behavior_profiles
+                WHERE tenant_id = ? AND entity_id = ?
+                """,
+                Integer.class,
+                "tenant_1",
+                "user_123"
+        );
+
+        assertThat(profileCount).isEqualTo(1);
+
+        Map<String, Object> profile = jdbcTemplate.queryForMap(
+                """
+                SELECT total_events, last_ip_address, last_device_id
+                FROM entity_behavior_profiles
+                WHERE tenant_id = ? AND entity_id = ?
+                """,
+                "tenant_1",
+                "user_123"
+        );
+
+        assertThat(profile.get("total_events")).isEqualTo(1);
+        assertThat(profile.get("last_ip_address")).isEqualTo("192.168.1.4");
+        assertThat(profile.get("last_device_id")).isEqualTo("device_1");
+
         String alertId = alertsJson.get("content").get(0).get("alertId").asText();
 
         String updateAlertRequest = """
@@ -137,10 +170,47 @@ class RiskPlatformFlowIntegrationTest extends IntegrationTestBase {
                 """;
 
         mockMvc.perform(patch("/api/v1/alerts/{alertId}/status", alertId)
+                        .header("X-Tenant-Id", "tenant_1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(updateAlertRequest))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.alertId").value(alertId))
                 .andExpect(jsonPath("$.status").value("RESOLVED"));
+
+        String secondEventRequest = """
+        {
+          "eventType": "LOGIN",
+          "entityId": "user_123",
+          "source": "web-app",
+          "ipAddress": "10.0.0.2",
+          "deviceId": "device_2",
+          "payload": {
+            "knownDevice": true,
+            "country": "ZA"
+          }
+        }
+        """;
+
+        mockMvc.perform(post("/api/v1/events")
+                        .header("X-Tenant-Id", "tenant_1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(secondEventRequest))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.eventId").exists())
+                .andExpect(jsonPath("$.assessmentId").exists());
+
+        Map<String, Object> updatedProfile = jdbcTemplate.queryForMap(
+                """
+                SELECT total_events, last_ip_address, last_device_id
+                FROM entity_behavior_profiles
+                WHERE tenant_id = ? AND entity_id = ?
+                """,
+                "tenant_1",
+                "user_123"
+        );
+
+        assertThat(updatedProfile.get("total_events")).isEqualTo(2);
+        assertThat(updatedProfile.get("last_ip_address")).isEqualTo("10.0.0.2");
+        assertThat(updatedProfile.get("last_device_id")).isEqualTo("device_2");
     }
 }

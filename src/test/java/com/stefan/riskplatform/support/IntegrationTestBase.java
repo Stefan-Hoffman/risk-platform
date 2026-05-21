@@ -20,6 +20,7 @@ public abstract class IntegrationTestBase {
             rule_hits,
             alerts,
             risk_assessments,
+            entity_behavior_profiles,
             enriched_events,
             events,
             risk_rules,

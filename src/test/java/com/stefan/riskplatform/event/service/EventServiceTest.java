@@ -6,6 +6,7 @@ import com.stefan.riskplatform.assessment.entity.RiskAssessment;
 import com.stefan.riskplatform.assessment.entity.RuleHit;
 import com.stefan.riskplatform.assessment.repository.RiskAssessmentRepository;
 import com.stefan.riskplatform.assessment.repository.RuleHitRepository;
+import com.stefan.riskplatform.behavior.service.EntityBehaviorProfileService;
 import com.stefan.riskplatform.common.enums.RiskDecision;
 import com.stefan.riskplatform.common.enums.TenantStatus;
 import com.stefan.riskplatform.entityrecord.entity.EntityRecord;
@@ -67,6 +68,9 @@ class EventServiceTest {
 
     @Mock
     private AlertService alertService;
+
+    @Mock
+    private EntityBehaviorProfileService entityBehaviorProfileService;
 
     @InjectMocks
     private EventService eventService;
@@ -145,6 +149,11 @@ class EventServiceTest {
         verify(riskAssessmentRepository).save(any(RiskAssessment.class));
         verify(ruleHitRepository).save(any(RuleHit.class));
         verify(alertService).createAlert(eq(tenant), eq(entityRecord), eq(savedAssessment), eq(60));
+        verify(entityBehaviorProfileService).updateProfileFromEvent(
+                eq(tenant),
+                eq(entityRecord),
+                eq(savedEvent)
+        );
     }
 
     @Test
@@ -207,6 +216,11 @@ class EventServiceTest {
         verify(riskAssessmentRepository).save(any(RiskAssessment.class));
         verify(ruleHitRepository, never()).save(any(RuleHit.class));
         verify(alertService, never()).createAlert(any(), any(), any(), anyInt());
+        verify(entityBehaviorProfileService).updateProfileFromEvent(
+                eq(tenant),
+                eq(entityRecord),
+                eq(savedEvent)
+        );
     }
 
     @Test

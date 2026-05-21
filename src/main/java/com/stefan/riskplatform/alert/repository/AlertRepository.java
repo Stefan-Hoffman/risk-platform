@@ -6,9 +6,13 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.Optional;
+
 public interface AlertRepository extends JpaRepository<Alert, String> {
 
     Page<Alert> findByTenant_TenantIdAndStatus(String tenantId, AlertStatus status, Pageable pageable);
 
     Page<Alert> findByTenant_TenantId(String tenantId, Pageable pageable);
+
+    Optional<Alert> findByAlertIdAndTenant_TenantId(String alertId, String tenantId);
 }

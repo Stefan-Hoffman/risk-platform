@@ -50,4 +50,94 @@ class RiskPlatformValidationIntegrationTest extends IntegrationTestBase {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("Validation failed"));
     }
+
+    @Test
+    void shouldReturnConflictWhenTenantAlreadyExists() throws Exception {
+        String request = """
+            {
+              "tenantId": "tenant_1",
+              "name": "Acme Bank",
+              "status": "ACTIVE"
+            }
+            """;
+
+        mockMvc.perform(post("/api/v1/tenants")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(request))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/api/v1/tenants")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(request))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.error").value("Conflict"))
+                .andExpect(jsonPath("$.message").value("Tenant already exists: tenant_1"));
+    }
+
+    @Test
+    void shouldReturnBadRequestWhenRuleJsonIsInvalid() throws Exception {
+        String tenantRequest = """
+            {
+              "tenantId": "tenant_1",
+              "name": "Acme Bank",
+              "status": "ACTIVE"
+            }
+            """;
+
+        mockMvc.perform(post("/api/v1/tenants")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(tenantRequest))
+                .andExpect(status().isCreated());
+
+        String badRuleRequest = """
+            {
+              "name": "Bad Rule",
+              "eventType": "LOGIN",
+              "conditionsJson": "{bad-json",
+              "riskScore": 60
+            }
+            """;
+
+        mockMvc.perform(post("/api/v1/rules")
+                        .header("X-Tenant-Id", "tenant_1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(badRuleRequest))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message").value("Invalid conditionsJson structure"));
+    }
+
+    @Test
+    void shouldReturnBadRequestWhenRuleStructureIsInvalid() throws Exception {
+        String tenantRequest = """
+            {
+              "tenantId": "tenant_1",
+              "name": "Acme Bank",
+              "status": "ACTIVE"
+            }
+            """;
+
+        mockMvc.perform(post("/api/v1/tenants")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(tenantRequest))
+                .andExpect(status().isCreated());
+
+        String badRuleRequest = """
+            {
+              "name": "Bad Rule",
+              "eventType": "LOGIN",
+              "conditionsJson": "{\\"operator\\":\\"XOR\\",\\"conditions\\":[{\\"field\\":\\"country\\",\\"operator\\":\\"EQUALS\\",\\"value\\":\\"ZA\\"}]}",
+              "riskScore": 60
+            }
+            """;
+
+        mockMvc.perform(post("/api/v1/rules")
+                        .header("X-Tenant-Id", "tenant_1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(badRuleRequest))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message").value("Top-level operator must be AND or OR"));
+    }
 }

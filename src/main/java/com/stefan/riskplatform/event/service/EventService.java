@@ -1,11 +1,13 @@
 package com.stefan.riskplatform.event.service;
 
+import org.springframework.transaction.annotation.Transactional;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stefan.riskplatform.alert.service.AlertService;
 import com.stefan.riskplatform.assessment.entity.RiskAssessment;
 import com.stefan.riskplatform.assessment.repository.RiskAssessmentRepository;
 import com.stefan.riskplatform.assessment.repository.RuleHitRepository;
+import com.stefan.riskplatform.behavior.service.EntityBehaviorProfileService;
 import com.stefan.riskplatform.common.exception.InvalidPayloadException;
 import com.stefan.riskplatform.common.exception.ResourceNotFoundException;
 import com.stefan.riskplatform.entityrecord.entity.EntityRecord;
@@ -42,7 +44,9 @@ public class EventService {
     private final RiskAssessmentRepository riskAssessmentRepository;
     private final AlertService alertService;
     private final RuleHitRepository ruleHitRepository;
+    private final EntityBehaviorProfileService entityBehaviorProfileService;
 
+    @Transactional
     public EventAcceptedResponse ingestEvent(String tenantId, EventRequest request) {
         log.info("Ingesting event. tenantId={}, entityId={}, eventType={}",
                 tenantId, request.getEntityId(), request.getEventType());
@@ -70,6 +74,12 @@ public class EventService {
                 .build();
 
         Event savedEvent = eventRepository.save(event);
+
+        entityBehaviorProfileService.updateProfileFromEvent(
+                tenant,
+                entityRecord,
+                savedEvent
+        );
 
         log.info("Event saved. eventId={}, tenantId={}", savedEvent.getEventId(), tenantId);
 
