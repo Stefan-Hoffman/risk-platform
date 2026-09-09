@@ -514,6 +514,8 @@ CI overrides Spring datasource settings with disposable database credentials, so
 
 To activate, commit and push the configuration to GitHub with Actions enabled for the repository. After the first successful run, configure a branch ruleset for `main` requiring **Build and test** and **Docker build** before merging. These repository settings must be enabled separately. Both jobs must pass: the Dockerfile itself skips tests.
 
+Dependabot groups MapStruct library and processor updates together. Major Spring Boot, springdoc, and Java container upgrades are deferred for coordinated migrations; other updates still run through CI. A failing dependency PR can indicate an incompatible proposed upgrade even when `main` passes. Existing upgrade PRs should be reviewed separately after changing this policy.
+
 Suggested follow-ups:
 
 - CodeQL scanning for Java once code scanning availability is confirmed for the repository.

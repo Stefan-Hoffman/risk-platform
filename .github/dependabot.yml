@@ -5,6 +5,15 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    # Framework major upgrades require a coordinated application migration.
+    ignore:
+      - dependency-name: org.springframework.boot:spring-boot-starter-parent
+        update-types: ["version-update:semver-major"]
+      - dependency-name: org.springdoc:*
+        update-types: ["version-update:semver-major"]
+    groups:
+      mapstruct:
+        patterns: ["org.mapstruct:*"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
@@ -15,3 +24,7 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    # Keep the build and runtime on Java 21 until the toolchain is migrated.
+    ignore:
+      - dependency-name: eclipse-temurin
+        update-types: ["version-update:semver-major"]
