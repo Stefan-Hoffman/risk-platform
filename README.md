@@ -1,25 +1,42 @@
-# Risk Detection Platform (Spring Boot)
+# Fraud and Risk Management Platform (Spring Boot)
 
-A multi-tenant **risk detection and alerting platform** built with Spring Boot.
+A multi-tenant **fraud detection and risk management platform** being built with Spring Boot.
 
-The system ingests events, evaluates them against configurable rules, calculates a risk score, and generates alerts when thresholds are exceeded.
+The current system ingests events, evaluates them against configurable rules, calculates a risk score, and generates alerts when thresholds are exceeded. The product direction is to let tenants configure risk policies, evaluate risky transactions and account activity, investigate suspected fraud, and record outcomes.
 
 ---
 
 # Overview
 
-This project simulates a real-world **fraud detection / risk engine** used in:
+This project is a learning prototype evolving toward tenant-managed fraud and risk workflows for:
 
 - Fintech platforms
 - Banking systems
 - Anti-abuse systems
 - Identity verification pipelines
 
+The first product milestone is one complete **tenant-managed transaction review flow**: ingest a transaction, calculate behavior features, return an explained decision, let an analyst investigate, and record the resolution. Login abuse detection remains a related use case for the same event and rule engine.
+
+Commercial usefulness still needs validation with a specific customer segment and pilot. The immediate focus is straightforward integration, understandable decisions, and useful analyst workflows.
+
+## Current State and Planned Capabilities
+
+| Area | Implemented today | Planned |
+|------|-------------------|---------|
+| Tenant management | Tenant records and tenant-scoped operations in several services | Authentication, tenant-bound authorization on every operation, administrator/analyst/read-only roles |
+| Detection | Rules over incoming payload fields, scores, assessments, and rule hits | Server-calculated history, velocity rules, tenant-configurable decision thresholds |
+| Behavior history | Persisted per-tenant/entity total events, last seen time, last IP, and last device; updated during ingestion | Use history in evaluation, reliable concurrent updates, time-window features |
+| Transactions | Generic events can carry transaction data | Validated transaction contract, currency-aware amounts, external transaction IDs, timestamps, and idempotent ingestion |
+| Decisions | Synchronous evaluation; ingestion returns event/assessment IDs and `ACCEPTED` | Return score, decision, and reasons directly; support monitoring-only rollout |
+| Fraud operations | Alerts and alert status updates | Tenant console, assigned cases, investigation notes, fraud/legitimate outcomes, and audit history |
+
+The application is not yet ready for a customer pilot. Tenant isolation is incomplete in some read paths, authentication is absent, profile increments can lose updates under concurrency, and some rule evaluation failures silently become non-matches. These are explicit roadmap items below.
+
 ---
 
 # ️ Core Features
 
-- Multi-tenant architecture (tenant isolation)
+- Multi-tenant data model and tenant-scoped service operations (authorization hardening planned)
 - Event ingestion API
 - Rule-based risk scoring engine
 - JSON-based rule conditions
@@ -29,6 +46,8 @@ This project simulates a real-world **fraud detection / risk engine** used in:
 - Global exception handling
 - Unit tests (services)
 - Controller tests (MockMvc)
+- Basic entity behavior profile persistence
+- Integration tests for event flows and validation
 
 ---
 
@@ -122,6 +141,7 @@ Key entities include:
 - Rule Hits
 - Alerts
 - Entity Records
+- Entity Behavior Profiles
 
 ---
 
@@ -133,6 +153,8 @@ Flow:
 
 ```text
 Event Ingestion
+    ↓
+Persist Event and Update Basic Behavior Profile
     ↓
 Load Enabled Rules
     ↓
@@ -154,6 +176,32 @@ Supported rule operators:
 - LESS_THAN_OR_EQUALS
 - AND
 - OR
+
+Evaluation currently reads only the event payload. Stored behavior profiles do not yet influence scores. `FeatureProfile` and `EnrichedEvent` provide model scaffolding for future capabilities; their presence does not mean feature calculation or fingerprinting is implemented.
+
+### Planned Transaction and Fraud Workflow
+
+```text
+Authenticated Tenant Integration
+    ↓
+Validate Transaction and Deduplicate Retries
+    ↓
+Load Prior Behavior and Calculate Time-Window Features
+    ↓
+Evaluate Tenant Rules and Decision Thresholds
+    ↓
+Return Decision, Score, and Reasons; Persist Assessment
+    ↓
+Tenant Integration Applies Hold / Block / Allow
+    ↓
+Analyst Investigates Case and Records Outcome
+```
+
+For example, a tenant could choose to review a transaction above a configured amount when the customer has made more than five transactions in ten minutes. The platform would calculate the count itself, explain the rule match, and create a review item. This is a planned example, not a currently supported history-based rule.
+
+An `ALLOW`, `REVIEW`, or `BLOCK` decision is a recommendation from the engine. The tenant's application or payment integration must enforce the corresponding action; the platform does not currently stop or hold payments.
+
+Feature calculation must define whether the current event counts toward a window and preserve prior device/IP values before updating the profile. Server-derived features must remain separate from customer-supplied payload fields.
 
 ---
 
@@ -187,7 +235,7 @@ The project intentionally starts as a modular monolith to:
 - reduce operational complexity
 - iterate quickly on business logic
 
-The architecture is being designed to later evolve into microservices when scaling requirements justify the added complexity.
+The planned fraud workflows can be implemented within this modular monolith. Service extraction and asynchronous processing will be considered when measured scaling or operational requirements justify them.
 
 Potential future service extraction areas:
 - Event ingestion service
@@ -200,7 +248,7 @@ Potential future service extraction areas:
 
 # Tech Stack
 
-- Java 17+
+- Java 21
 - Spring Boot 3
 - Spring Web
 - Spring Data JPA
@@ -394,17 +442,25 @@ PATCH /api/v1/alerts/{alertId}/status
 ---
 # Risk Scoring Logic
 
-Each rule contains:
+Example condition group stored in a rule's `conditionsJson`:
 ```json
 {
-  "field": "knownDevice",
-  "value": false
+  "operator": "AND",
+  "conditions": [
+    {
+      "field": "knownDevice",
+      "operator": "EQUALS",
+      "value": false
+    }
+  ]
 }
 ```
 Evaluation:
 ```text
 if (payload[field] == value) → add rule.riskScore
 ```
+
+In this example, `knownDevice` must currently be supplied in the payload; the engine does not calculate it from device history. Scores sum the scores of matched rules, and rule hits retain the matched contributions.
 
 ---
 ## Decision Thresholds
@@ -413,6 +469,8 @@ if (payload[field] == value) → add rule.riskScore
 | < 50 | ALLOW   |
 | 50–79 | REVIEW   |
 | ≥ 80 | BLOCK   |
+
+These thresholds are currently fixed in code. Scores of 50 or above also create an alert. Tenant-configurable thresholds and explained decisions in the ingestion response are planned.
 
 ---
 # Database Design
@@ -423,7 +481,9 @@ if (payload[field] == value) → add rule.riskScore
 - Event
 - RiskRule
 - RiskAssessment
+- RuleHit
 - Alert
+- EntityBehaviorProfile
 
 ## ERD
 ![](assets/mermaid-diagram.png)
@@ -437,13 +497,15 @@ Run Tests:
 Includes:
 - Unit tests (service layer)
 - Controller tests (MockMvc)
+- Integration tests for event processing, behavior profile persistence, and validation
 
 ---
 # Configuration and Security
 
 - .env is ignored from Git
-- No credentials stored in the code
-- Tenant isolation enforced in service layer
+- Use local development credentials only for local development
+- Tenant checks exist in service operations, but some ID-based reads still require tenant scoping
+- Authentication, role-based access, and audit history are planned before a tenant pilot
 - Global exception handling implemented
 
 ---
@@ -464,33 +526,59 @@ Includes:
 - [x] Pagination + filtering
 - [x] Improved validation and error handling
 
-## Phase 3
-- [ ] Feature store (user behavior history) (current)
-- [ ] Velocity rules (e.g. login frequency)
-- [ ] Device/IP fingerprinting
-- [ ] Risk aggregation over time
-- [ ] Behavioral anomaly detection
+Phases 1 and 2 describe the existing prototype foundation, not production readiness. Phase 3 has started with basic history persistence. Security and tenant administration now precede a customer-facing fraud workflow.
 
-## Phase 4
-- [ ] Graph-based analysis (Neo4j)
-- [ ] Shared device/IP detection
+## Phase 3 — Secure Tenant Management and Reliable History (Current)
+- [x] Persist basic entity behavior profiles and update them during ingestion
+- [x] Unit and integration coverage for basic profile persistence
+- [ ] Authentication for tenant users and API integrations (JWT / OAuth2)
+- [ ] Derive tenant access from authenticated identity and scope every read/write to that tenant
+- [ ] Tenant roles: administrator, analyst, and read-only user
+- [ ] Audit history for rule, configuration, and analyst decision changes
+- [ ] Make profile creation and counter updates safe under concurrent ingestion
+- [ ] Surface invalid rules and evaluation errors explicitly instead of silently treating them as non-matches
+- [ ] Add authorization and concurrent ingestion regression coverage
+
+## Phase 4 — Transaction Decisions and Velocity Rules
+- [ ] Define a validated transaction event contract: external transaction ID, amount, currency, customer/entity, recipient, and event timestamp
+- [ ] Idempotent transaction ingestion so retries do not duplicate assessments, alerts, or history
+- [ ] Define timestamp handling and time-window semantics, including late events and whether the current event is counted
+- [ ] Add indexed tenant/entity/event-type/time-window queries
+- [ ] Build an evaluation context combining payload data with separate server-calculated behavior features
+- [ ] Velocity rules for login frequency, transaction frequency, and cumulative spend with explicit currency handling
+- [ ] Tenant-managed rule lifecycle and configurable score thresholds
+- [ ] Return decision, score, and matched reasons directly from synchronous evaluation
+- [ ] Monitoring-only mode and rule preview against historical events before enforcement
+- [ ] Document integration responsibility for enforcing allow, review/hold, and block actions
+- [ ] Test window boundaries, tenant isolation, retries, and end-to-end rule-to-decision behavior
+
+## Phase 5 — Tenant Fraud Investigation and First Pilot
+- [ ] Tenant console for configuring rules and reviewing assessments and alerts
+- [ ] Case management: assignment, investigation notes, status transitions, and linked transactions/assessments
+- [ ] Record confirmed fraud and legitimate outcomes, analyst identity, and resolution time
+- [ ] Record review actions and communicate resolutions to the tenant integration for enforcement
+- [ ] Use analyst feedback to measure false positives and guide rule tuning
+- [ ] Rate limiting and operational observability (for example, Prometheus/Grafana)
+- [ ] Select a target customer segment and validate integration and workflow needs with a pilot
+- [ ] Demonstrate a complete transaction review flow: ordinary activity passes, suspicious activity is explained and queued, an analyst resolves the case, and the integration receives the outcome
+
+## Phase 6 — Richer Behavioral Detection
+- [ ] Device/IP history and fingerprinting
+- [ ] First-time recipient and unfamiliar device signals
+- [ ] Risk aggregation over time
+- [ ] Behavioral baselines and anomaly detection, such as unusual transaction amounts
+- [ ] Expanded tenant dashboards for fraud outcomes and detection performance
+
+## Phase 7 — Relationship Analysis
+- [ ] Graph-based analysis (evaluate Neo4j when needed)
+- [ ] Shared device/IP detection within authorized tenant boundaries
 - [ ] Fraud ring detection
 - [ ] Entity relationship scoring
 
-## Phase 5
-- [ ] Async processing (Kafka/RabbitMQ)
-- [ ] Microservices architecture
-- [ ] Real-time dashboards
-- [ ] ML-based scoring
-
-## Future Improvements
-- [ ] Authentication (JWT / OAuth2)
-- [ ] Role-based access control
-- [ ] Audit logging
-- [ ] Rate limiting
-- [ ] Observability (Prometheus, Grafana)
+## Phase 8 — Scale and Advanced Scoring (When Justified)
+- [ ] Async processing (Kafka/RabbitMQ) where latency and workflow requirements allow it
+- [ ] Extract microservices only where measured scaling or operational needs justify them
+- [ ] Real-time operational dashboards
+- [ ] ML-based scoring once sufficient labeled outcomes and evaluation data exist
 ---
 
-# Notes
-
-This project is purely for the intention of upskilling and learning. Any feedback would be appreciated.
