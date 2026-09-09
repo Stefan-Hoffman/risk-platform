@@ -1,30 +1,22 @@
 version: 2
+# Security-first policy: disable routine version-update PRs.
+# Enable Dependency graph, Dependabot alerts, and Dependabot security updates
+# in repository settings. These settings cannot be enabled by this file.
+# The schedule is required by the schema; security fixes are alert-driven.
 updates:
   - package-ecosystem: maven
     directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
-    # Framework major upgrades require a coordinated application migration.
-    ignore:
-      - dependency-name: org.springframework.boot:spring-boot-starter-parent
-        update-types: ["version-update:semver-major"]
-      - dependency-name: org.springdoc:*
-        update-types: ["version-update:semver-major"]
-    groups:
-      mapstruct:
-        patterns: ["org.mapstruct:*"]
+    open-pull-requests-limit: 0
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
   - package-ecosystem: docker
     directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
-    # Keep the build and runtime on Java 21 until the toolchain is migrated.
-    ignore:
-      - dependency-name: eclipse-temurin
-        update-types: ["version-update:semver-major"]
+    # This disables image-version PRs; it does not scan image contents.
+    open-pull-requests-limit: 0
