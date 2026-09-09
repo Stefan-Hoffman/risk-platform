@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Build and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: risk_platform_test
+          POSTGRES_USER: risk_ci
+          # Disposable CI database only; no repository secrets required.
+          POSTGRES_PASSWORD: risk_ci_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U risk_ci -d risk_platform_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      # Override both main and test application configuration.
+      SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/risk_platform_test
+      SPRING_DATASOURCE_USERNAME: risk_ci
+      SPRING_DATASOURCE_PASSWORD: risk_ci_password
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Set up Java 21 and Maven cache
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Verify with Maven Wrapper
+        # Also discover the existing tenant service tests named TenantService.java.
+        run: bash ./mvnw --batch-mode --no-transfer-progress "-Dtest=*Test,Test*,*Tests,*TestCase,com.stefan.riskplatform.tenant.service.TenantService" verify
+      - name: Upload test reports
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-reports
+          path: target/surefire-reports/
+          if-no-files-found: warn
+          retention-days: 7
+
+  docker:
+    name: Docker build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Build application image
+        run: docker build --tag risk-platform:ci .

@@ -500,6 +500,29 @@ Includes:
 - Integration tests for event processing, behavior profile persistence, and validation
 
 ---
+# GitHub Automation
+
+The repository includes `.github/workflows/ci.yml` and `.github/dependabot.yml`.
+
+| Check | When | Purpose |
+|-------|------|---------|
+| Build and test | Pull requests, pushes to `main`, or manual dispatch | Java 21 Maven verification with a disposable PostgreSQL 16 service; runs unit, controller, and integration tests and exercises Flyway migrations |
+| Docker build | Same CI triggers | Builds the existing Dockerfile to catch packaging failures; does not publish or deploy an image |
+| Dependabot | Weekly after its configuration reaches the default branch | Opens update PRs for Maven dependencies, GitHub Actions, and Docker base images; does not automatically merge them |
+
+CI overrides Spring datasource settings with disposable database credentials, so no database secrets or access to a developer database are needed. Test reports are uploaded even after test failures and retained for seven days. The workflow explicitly includes the existing tenant service test class named `TenantService.java`, which Maven's default test naming patterns would otherwise miss.
+
+To activate, commit and push the configuration to GitHub with Actions enabled for the repository. After the first successful run, configure a branch ruleset for `main` requiring **Build and test** and **Docker build** before merging. These repository settings must be enabled separately. Both jobs must pass: the Dockerfile itself skips tests.
+
+Suggested follow-ups:
+
+- CodeQL scanning for Java once code scanning availability is confirmed for the repository.
+- JaCoCo coverage reporting, followed by a meaningful coverage baseline for detection and tenant authorization logic.
+- Tagged image publishing and deployment when a registry and hosting target have been chosen.
+
+References: [GitHub Maven CI](https://docs.github.com/en/actions/tutorials/build-and-test-code/java-with-maven), [PostgreSQL services](https://docs.github.com/en/actions/tutorials/use-containerized-services/create-postgresql-service-containers), and [Dependabot configuration](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference).
+
+---
 # Configuration and Security
 
 - .env is ignored from Git
